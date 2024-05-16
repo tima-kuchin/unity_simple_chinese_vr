@@ -14,6 +14,9 @@ using UnityEditor.Search;
 using System.Threading;
 using System.Net.NetworkInformation;
 using Unity.VisualScripting.Dependencies.Sqlite;
+using Unity.VisualScripting;
+using static UnityEditor.ShaderGraph.Internal.KeywordDependentCollection;
+using UnityEngine.Tilemaps;
 
 public class RunProcess : MonoBehaviour
 {
@@ -135,7 +138,7 @@ public class RunProcess : MonoBehaviour
     private void LoadHier()
     {
         int randomIndex = UnityEngine.Random.Range(0, database.Count);
-        grCode =  database.Keys.ElementAt(randomIndex);
+        grCode = database.Keys.ElementAt(randomIndex);
         int unicodeValue = int.Parse(grCode, System.Globalization.NumberStyles.HexNumber);
         char unicodeGrCode = (char)unicodeValue;
         chineseHierField.SetText(unicodeGrCode.ToString());
@@ -377,7 +380,29 @@ public class RunProcess : MonoBehaviour
                 string fileName = Path.GetFileNameWithoutExtension(imagePaths[i]);
                 texture.name = fileName;
                 textures[i] = texture;
+
+                RemoveWhite(texture);
             }
+        }
+    }
+    private void RemoveWhite(Texture2D texture)
+    {
+        if (texture != null)
+        {
+            for (int y = 0; y < texture.height; y++)
+            {
+                for (int x = 0; x < texture.width; x++)
+                {
+                    Color pixelColor = texture.GetPixel(x, y);
+
+                    if (pixelColor.r > 0.9f && pixelColor.g > 0.9f && pixelColor.b > 0.9f)
+                    {
+                        pixelColor.a = 0;
+                        texture.SetPixel(x, y, pixelColor);
+                    }
+                }
+            }
+            texture.Apply();
         }
     }
 
@@ -484,11 +509,17 @@ public class RunProcess : MonoBehaviour
 
     private void DestroyAllTiles()
     {
+
         List<GameObject> createdTilesCopy = new List<GameObject>(createdTiles);
         List<GameObject> socketedTilesCopy = new List<GameObject>(socketedTiles);
 
         foreach (GameObject tile in createdTilesCopy)
         {
+            if (socketedTilesCopy.Contains(tile))
+            {
+                UnityEngine.Debug.LogWarning("Коллизия: объект " + tile.name + " содержится как в createdTiles, так и в socketedTiles. Пропускаем удаление.");
+            }
+
             if (tile != null)
             {
                 Destroy(tile);
@@ -498,6 +529,13 @@ public class RunProcess : MonoBehaviour
 
         foreach (GameObject tile in socketedTilesCopy)
         {
+            if (createdTilesCopy.Contains(tile))
+            {
+
+                UnityEngine.Debug.LogWarning("Коллизия: объект " + tile.name + " содержится как в createdTiles, так и в socketedTiles. Пропускаем удаление.");
+                continue;
+            }
+
             if (tile != null)
             {
                 Destroy(tile);
@@ -512,7 +550,7 @@ public class RunProcess : MonoBehaviour
         {
             DestroyAllTiles();
         }
-        else 
+        else
         {
             DestroyFieldTiles();
         }
@@ -527,26 +565,16 @@ public class RunProcess : MonoBehaviour
         createdTiles.Remove(addedTile);
         UpdateTileField(false);
     }
-
     private void OnTileRemovedFromSocket(XRBaseInteractable interactable)
     {
         GameObject removedTile = interactable.gameObject;
         if (removedTile != null && socketedTiles.Contains(removedTile))
         {
-            removedTile.name += "_toRm";
-
-            // Поиск объектов в сцене по названию и удаление их
-            GameObject[] tilesToRemove = GameObject.FindGameObjectsWithTag("Tile");
-            foreach (GameObject tile in tilesToRemove)
-            {
-                if (tile.name.Contains("_toRm"))
-                {
-                    Destroy(tile);
-                }
-            }
+            removedTile.name = AddMarkToTileName(removedTile.name);
             UpdateTileField(false);
         }
     }
+
     //Остальное
     public void ReturnTimeScale()
     {
@@ -561,5 +589,10 @@ public class RunProcess : MonoBehaviour
             int numY = int.Parse(y);
             return numX.CompareTo(numY);
         }
+    }
+
+    private string AddMarkToTileName(string originalName)
+    {
+        return originalName + "_to_rm";
     }
 }
